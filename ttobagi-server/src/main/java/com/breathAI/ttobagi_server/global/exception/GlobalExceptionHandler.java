@@ -4,6 +4,7 @@ import com.breathAI.ttobagi_server.global.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -41,6 +42,15 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.badRequest()
                     .body(new ApiResponse<> (false, "입력값 검증에 실패했습니다.", errors, 400));
+    }
+
+    // 본문 파싱 실패 처리 (잘못된 JSON, 깨진 인코딩 등)
+    // 클라이언트 요청 오류이므로 500이 아닌 400으로 응답한다
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadableException(HttpMessageNotReadableException ex) {
+        log.warn("요청 본문 파싱 실패: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("요청 본문을 읽을 수 없습니다.", 400));
     }
 
     // 미처리 예외의 최후 방어선 (내부 정보 비노출)
