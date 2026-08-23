@@ -18,8 +18,10 @@ public class UserInfoResponse {
 
     private String role;
 
+    // 원시 타입이면 Lombok이 isActive() 게터를 만들어 Jackson이 active 속성을 추가로 노출한다.
+    // 래퍼 타입을 써서 getIsActive() 게터가 생성되도록 하여 isActive 하나로 통일한다
     @JsonProperty("isActive")
-    private boolean isActive;
+    private Boolean isActive;
 
     @JsonFormat(
         shape = JsonFormat.Shape.STRING,
