@@ -131,6 +131,8 @@ export default function AnalyzePage() {
             const poll = setInterval(async () => {
               const statusRes = await dashApi.getAnalysisStatus(analysisId, token);
               const status = statusRes.data?.status;
+              if (status === "PREPROCESSING") setStep(0);
+              if (status === "ANALYZING")     setStep(2);
               if (status === "COMPLETED") {
                 clearInterval(poll);
                 setStep(4);

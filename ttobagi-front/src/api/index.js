@@ -77,11 +77,15 @@ export const dashApi = {
 
   // GET /api/v1/dashboard/analyze/stream/{analysisId} (SSE)
   streamAnalysisStatus: (analysisId, token, onMessage, onError) => {
+    // EventSource는 커스텀 헤더를 못 보내므로 토큰을 쿼리스트링으로 전달
+    // (백엔드가 SSE 경로에서 쿼리 토큰 인증을 지원해야 실제로 인증됨)
     const eventSource = new EventSource(
-      `${BASE_URL}/api/v1/dashboard/analyze/stream/${analysisId}`,
+      `${BASE_URL}/api/v1/dashboard/analyze/stream/${analysisId}?token=${encodeURIComponent(token)}`,
     );
 
-    eventSource.onmessage = (e) => onMessage(e.data);
+    // 백엔드가 SseEmitter.event().name("status")로 이름 있는 이벤트를 보내므로
+    // 기본 "message"만 받는 onmessage가 아닌 addEventListener로 수신해야 함
+    eventSource.addEventListener("status", (e) => onMessage(e.data));
 
     eventSource.onerror = () => {
       eventSource.close();
