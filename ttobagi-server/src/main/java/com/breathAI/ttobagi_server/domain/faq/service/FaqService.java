@@ -48,6 +48,8 @@ public class FaqService {
                         .question(f.getQuestion())
                         .answer(f.getAnswer())
                         .keywords(parseKeywords(f.getKeywords()))
+                        .qType(f.getQType())
+                        .category(f.getCategory())
                         .createdAt(f.getCreatedAt().toLocalDate())
                         .build())
                 .collect(Collectors.toList());
@@ -73,6 +75,7 @@ public class FaqService {
                 .answer(faq.getAnswer())
                 .keywords(parseKeywords(faq.getKeywords()))
                 .qType(faq.getQType())
+                .category(faq.getCategory())
                 .qaCnt(faq.getQaCnt())
                 .createdAt(faq.getCreatedAt().toLocalDate())
                 .build();
@@ -214,6 +217,8 @@ public class FaqService {
                 .question(request.getFinalQuestion())
                 .answer(request.getFinalAnswer())
                 .keywords(keywordsJson)
+                .qType(candidate.getQType())
+                .category(candidate.getCategory())
                 .createdBy(user)
                 .build();
         faqRepository.save(newFaq);
@@ -256,7 +261,10 @@ public class FaqService {
                         ? candidate.getCluster().getClusterLabel() : null)
                 .candidateId(candidate.getCandidateId())
                 .candidateType(candidate.getCandidateType())
+                .qType(candidate.getQType())
+                .category(candidate.getCategory())
                 .standardQuestion(candidate.getStandardQuestion())
+                .similarQuestions(candidate.getSimilarQuestions())
                 .answerDraft(candidate.getAnswerDraft())
                 .reviewStatus(candidate.getReviewStatus())
                 .representativeKeywords(candidate.getRepresentativeKeywords())

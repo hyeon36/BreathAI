@@ -16,6 +16,7 @@ public class FaqDetailResponse {
     private String answer;
     private List<String> keywords;
     private Integer qType;
+    private String category;
     private Integer qaCnt;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")

@@ -569,6 +569,9 @@ public class DashboardService {
                         .candidateType(FaqCandidate.CandidateType.valueOf(candidateResult.getCandidateType()))
                         .standardQuestion(candidateResult.getStandardQuestion())
                         .answerDraft(candidateResult.getAnswerDraft())
+                        .qType(candidateResult.getQType())
+                        .category(candidateResult.getCategory())
+                        .similarQuestions(candidateResult.getSimilarQuestions())
                         .occurrenceCount(candidateResult.getOccurrenceCount())
                         .representativeKeywords(candidateResult.getRepresentativeKeywords())
                         .build();
@@ -725,7 +728,10 @@ public class DashboardService {
                 .clusterLabel(candidate.getCluster() != null
                         ? candidate.getCluster().getClusterLabel() : -1)
                 .candidateType(candidate.getCandidateType().name())
+                .qType(candidate.getQType())
+                .category(candidate.getCategory())
                 .standardQuestion(candidate.getStandardQuestion())
+                .similarQuestions(candidate.getSimilarQuestions())
                 
                 .representativeKeywords(candidate.getRepresentativeKeywords()) 
                 
