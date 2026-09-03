@@ -52,6 +52,9 @@ public class Faq {
     @Column(name = "q_type", columnDefinition = "INT COMMENT '카테고리 코드'")
     private Integer qType;
 
+    @Column(name = "category", length = 100, columnDefinition = "VARCHAR(100) COMMENT '일반상담 카테고리'")
+    private String category;
+
     @Column(name = "qa_cnt", nullable = false, columnDefinition = "INT NOT NULL DEFAULT 0 COMMENT '누적 질의 수'")
     @ColumnDefault("0")
     private Integer qaCnt;
@@ -87,13 +90,14 @@ public class Faq {
 
     @Builder
     public Faq(Integer sourceSeqNum, FaqCandidate candidate, String question, String answer,
-               String keywords, Integer qType, User createdBy) {
+               String keywords, Integer qType, String category, User createdBy) {
         this.sourceSeqNum = sourceSeqNum;
         this.candidate = candidate;
         this.question = question;
         this.answer = answer;
         this.keywords = keywords;
         this.qType = qType;
+        this.category = category;
         this.createdBy = createdBy;
         this.isActive = true;
         this.qaCnt = 0;

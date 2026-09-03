@@ -110,7 +110,10 @@ public class AnalyzeResultResponse {
         private Long candidateId;
         private int clusterLabel;
         private String candidateType;
+        private Integer qType;
+        private String category;
         private String standardQuestion;
+        private List<String> similarQuestions;
         private List<String> representativeKeywords;
         private String answerDraft;
         private List<SynonymItem> synonyms;

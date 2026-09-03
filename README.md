@@ -200,3 +200,20 @@ Issue 생성
 → Branch 삭제
 → (배포 시점) develop → main Merge
 ```
+
+## FAQ 지식 데이터 설정
+
+AI 검색기는 서울교통공사의 수제작 FAQ 두 자료와 운영자가 승인한
+`gold_faq`를 병합하여 사용합니다. 배포 환경에서는 다음 환경변수로
+원천 파일 경로를 지정합니다.
+
+```text
+TTOBAGI_GENERAL_FAQ_PATH=/data/일반상담.xlsx
+TTOBAGI_COUNSELLING_FAQ_PATH=/data/counselling_info.csv
+TTOBAGI_FAQ_MATCH_THRESHOLD=0.80
+TTOBAGI_SIMILAR_QUESTION_LIMIT=5
+```
+
+환경변수가 없으면 각각 `dataset/일반상담.xlsx`와
+`dataset/counselling_info.csv`를 찾습니다. 일반상담에만 존재하여
+`counselling_info`와 연결되지 않는 FAQ의 `qType`은 `null`로 유지합니다.

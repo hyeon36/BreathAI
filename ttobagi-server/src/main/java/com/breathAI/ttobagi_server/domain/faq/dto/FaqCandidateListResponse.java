@@ -31,7 +31,10 @@ public class FaqCandidateListResponse {
         private Integer clusterLabel;
         private Long candidateId;
         private CandidateType candidateType;
+        private Integer qType;
+        private String category;
         private String standardQuestion;
+        private List<String> similarQuestions;
         private String answerDraft;
         private ReviewStatus reviewStatus;
         private List<String> representativeKeywords;

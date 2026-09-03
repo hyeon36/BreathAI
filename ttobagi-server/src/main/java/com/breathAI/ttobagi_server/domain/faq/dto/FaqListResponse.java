@@ -26,6 +26,8 @@ public class FaqListResponse {
         private String question;
         private String answer;
         private List<String> keywords;
+        private Integer qType;
+        private String category;
 
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
         private LocalDate createdAt;
