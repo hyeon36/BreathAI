@@ -132,7 +132,7 @@ public class DashboardService {
                 .performanceMetrics(commonData.getPerformanceMetrics())
                 .trend(commonData.getTrend())
                 .burstKeywords(commonData.getBurstKeywords())
-                .unansweredAnalysis(commonData.getUnansweredAnalysis())
+                .unanswerAnalysis(commonData.getUnanswerAnalysis())
                 .clusteringView(commonData.getClusteringView())
                 .faqCandidates(commonData.getFaqCandidates())
                 .evaluation(commonData.getEvaluation())
@@ -162,7 +162,7 @@ public class DashboardService {
                 .samplingStatus(AnalyzeResultResponse.SystemStatus.SamplingStatus.builder()
                         .correct(correctCount)
                         .lowQuality(lowQualityCount)
-                        .unanswered(unansweredCount)
+                        .unanswer(unansweredCount)
                         .build())
                 .build();
 
@@ -176,7 +176,7 @@ public class DashboardService {
         AnalyzeResultResponse.PerformanceMetrics performanceMetrics = null;
         if (comparison != null) {
                 performanceMetrics = AnalyzeResultResponse.PerformanceMetrics.builder()
-                        .currentUnansweredRate(comparison.getAfterUnanswerRate() != null
+                        .currentUnanswerRate(comparison.getAfterUnanswerRate() != null
                                 ? comparison.getAfterUnanswerRate().doubleValue() : 0.0)
                         .predictedAccuracyGain(comparison.getAccuracyGain() != null
                                 ? comparison.getAccuracyGain().doubleValue() : 0.0)
@@ -192,7 +192,7 @@ public class DashboardService {
         List<AnalyzeResultResponse.TrendItem> trend = usageStats.stream()
                 .map(s -> AnalyzeResultResponse.TrendItem.builder()
                         .date(s.getStatDate().getStatDate().toString())
-                        .unansweredCount(s.getUnanswerCnt())
+                        .unanswerCount(s.getUnanswerCnt())
                         .lowQualityCount(s.getLowQualityCount())
                         .build())
                 .collect(Collectors.toList());
@@ -312,7 +312,7 @@ public class DashboardService {
                 .performanceMetrics(performanceMetrics)
                 .trend(trend)
                 .burstKeywords(burstKeywords)
-                .unansweredAnalysis(unansweredAnalysis)
+                .unanswerAnalysis(unansweredAnalysis)
                 .clusteringView(clusteringView)
                 .faqCandidates(faqCandidates)
                 .evaluation(evaluation)
@@ -758,6 +758,7 @@ public class DashboardService {
     // 클러스터 메타 정보를 응답 DTO로 변환
     private AnalyzeResultResponse.ClusteringView.ClusterName buildClusterName(Cluster c) {
         return AnalyzeResultResponse.ClusteringView.ClusterName.builder()
+                .clusterId(c.getClusterId())
                 .clusterLabel(c.getClusterLabel())
                 .name(c.getClusterName())
                 .topKeywords(c.getTopKeywords()) 
