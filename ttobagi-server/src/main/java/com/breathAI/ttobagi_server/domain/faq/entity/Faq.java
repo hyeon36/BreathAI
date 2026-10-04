@@ -17,6 +17,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import com.breathAI.ttobagi_server.domain.auth.entity.User;
 
 import java.time.LocalDateTime;
@@ -59,6 +61,7 @@ public class Faq {
     @ColumnDefault("0")
     private Integer qaCnt;
 
+    @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(name = "is_active", nullable = false, columnDefinition = "TINYINT NOT NULL DEFAULT 1 COMMENT '활성 여부'")
     @ColumnDefault("1")
     private Boolean isActive;
