@@ -12,7 +12,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import com.breathAI.ttobagi_server.global.util.SseEmitterManager;
 
 
 import java.util.List;
@@ -25,7 +24,6 @@ import java.time.LocalDate;
 public class DashboardController {
 
     private final DashboardService dashboardService;
-    private final SseEmitterManager sseEmitterManager;
 
     // 월 단위 챗봇 사용량 조회
     @GetMapping("/usage")
@@ -106,10 +104,10 @@ public class DashboardController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    // 분석 진행 상태 실시간 스트리밍(SSE)
+    // 분석 진행 상태 실시간 스트리밍(SSE), 연결 즉시 현재 상태를 한 번 전송
     @GetMapping(value = "/analyze/stream/{analysisId}", produces = "text/event-stream")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public SseEmitter streamAnalysisStatus(@PathVariable Long analysisId) {
-        return sseEmitterManager.create(analysisId);
+        return dashboardService.subscribeAnalysisStatus(analysisId);
     }
 }

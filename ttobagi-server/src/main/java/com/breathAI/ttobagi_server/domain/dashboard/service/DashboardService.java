@@ -20,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.multipart.MultipartFile;
 import org.apache.commons.codec.digest.DigestUtils;
 import java.io.IOException;
@@ -422,6 +423,23 @@ public class DashboardService {
                         ? analysisJob.getStartedAt()
                         : analysisJob.getCreatedAt())
                 .build();
+    }
+
+    // 분석 진행 상태 실시간 구독(SSE)
+    // 연결 즉시 현재 상태를 보내 클라이언트가 연결 여부와 진행 상황을 바로 알 수 있게 한다
+    // 이미 끝난 분석이면 현재 상태를 보낸 뒤 연결이 닫힌다
+    public SseEmitter subscribeAnalysisStatus(Long analysisId) {
+        if (!analysisJobRepository.existsById(analysisId)) {
+            throw new CustomException(ErrorCode.ANALYSIS_NOT_FOUND);
+        }
+
+        // 구독을 먼저 등록한 뒤 상태를 읽어야 그 사이에 도착한 콜백을 놓치지 않는다
+        SseEmitter emitter = sseEmitterManager.create(analysisId);
+        AnalysisJob.Status status = analysisJobRepository.findById(analysisId)
+                .map(AnalysisJob::getStatus)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANALYSIS_NOT_FOUND));
+        sseEmitterManager.send(emitter, analysisId, status.name(), getStatusMessage(status));
+        return emitter;
     }
 
     // 분석 이력 목록 조회, 최신순 페이징

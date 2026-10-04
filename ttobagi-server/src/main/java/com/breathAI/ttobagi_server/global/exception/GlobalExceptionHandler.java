@@ -3,12 +3,15 @@ package com.breathAI.ttobagi_server.global.exception;
 import com.breathAI.ttobagi_server.global.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,8 +26,10 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handlerCustomException(CustomException ex) {
         ErrorCode errorCode = ex.getErrorCode();
         log.warn("CustomException: {}", errorCode.getMessage());
+        // SSE처럼 JSON이 아닌 응답을 요청한 경우에도 오류는 JSON으로 내려준다
         return ResponseEntity
                 .status(errorCode.getStatus())
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(ApiResponse.error(errorCode));
     }
 
@@ -51,6 +56,14 @@ public class GlobalExceptionHandler {
         log.warn("요청 본문 파싱 실패: {}", ex.getMessage());
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error("요청 본문을 읽을 수 없습니다.", 400));
+    }
+
+    // SSE 연결이 제한 시간에 도달해 끝나는 것은 정상 동작이므로 오류로 기록하지 않는다
+    // 응답이 이미 이벤트 스트림으로 전송 중이라 본문은 쓰지 않는다
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public void handleAsyncRequestTimeout() {
+        log.debug("비동기 요청이 제한 시간에 도달해 종료되었습니다.");
     }
 
     // 미처리 예외의 최후 방어선 (내부 정보 비노출)
