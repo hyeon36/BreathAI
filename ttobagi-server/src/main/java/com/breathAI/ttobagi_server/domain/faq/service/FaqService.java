@@ -4,7 +4,9 @@ import com.breathAI.ttobagi_server.domain.auth.entity.User;
 import com.breathAI.ttobagi_server.domain.auth.repository.UserRepository;
 import com.breathAI.ttobagi_server.domain.faq.dto.*;
 import com.breathAI.ttobagi_server.domain.faq.entity.*;
+import com.breathAI.ttobagi_server.domain.faq.entity.FaqCandidate.CandidateType;
 import com.breathAI.ttobagi_server.domain.faq.entity.FaqCandidate.ReviewStatus;
+import com.breathAI.ttobagi_server.domain.faq.entity.FaqEditHistory.EditType;
 import com.breathAI.ttobagi_server.domain.faq.repository.*;
 import com.breathAI.ttobagi_server.global.exception.CustomException;
 import com.breathAI.ttobagi_server.global.exception.ErrorCode;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 // 운영 FAQ 관리 및 AI 생성 FAQ 후보 반영 처리
@@ -37,15 +40,35 @@ public class FaqService {
     private final ObjectMapper objectMapper;
 
     // FAQ 목록 조회, 활성 항목만 최신순 페이징
+    // 카테고리는 마스터의 표시명과 일치하는 코드로, 키워드는 질문·답변·키워드 목록에서 검색
     @Transactional(readOnly = true)
-    public FaqListResponse getFaqList(int page, int size) {
+    public FaqListResponse getFaqList(int page, int size, String category, String keyword) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Faq> faqPage = faqRepository.findByIsActiveTrueOrderByCreatedAtDesc(pageRequest);
+
+        // 카테고리 조건이 있을 때만 마스터를 조회한다
+        String categoryName = blankToNull(category);
+        List<Integer> qTypes = List.of();
+        if (categoryName != null) {
+            qTypes = faqRepository.findQTypesByCategoryName(categoryName);
+            // 마스터에 없는 카테고리명이면 결과 없음
+            if (qTypes.isEmpty()) {
+                return FaqListResponse.builder()
+                        .faqList(List.of())
+                        .totalCount(0)
+                        .totalPages(0)
+                        .currentPage(page)
+                        .size(size)
+                        .build();
+            }
+        }
+
+        Page<Faq> faqPage = faqRepository.search(
+                categoryName != null, qTypes, blankToNull(keyword), pageRequest);
 
         List<FaqListResponse.FaqItem> items = faqPage.getContent().stream()
                 .map(f -> FaqListResponse.FaqItem.builder()
                         .faqId(f.getFaqId())
-                        .question(f.getQuestion())
+                        .standardQuestion(f.getQuestion())
                         .answer(f.getAnswer())
                         .keywords(parseKeywords(f.getKeywords()))
                         .qType(f.getQType())
@@ -71,13 +94,14 @@ public class FaqService {
 
         return FaqDetailResponse.builder()
                 .faqId(faq.getFaqId())
-                .question(faq.getQuestion())
+                .standardQuestion(faq.getQuestion())
                 .answer(faq.getAnswer())
                 .keywords(parseKeywords(faq.getKeywords()))
                 .qType(faq.getQType())
                 .category(faq.getCategory())
                 .qaCnt(faq.getQaCnt())
                 .createdAt(faq.getCreatedAt().toLocalDate())
+                .updatedAt(faq.getUpdatedAt().toLocalDate())
                 .build();
     }
 
@@ -92,64 +116,83 @@ public class FaqService {
 
         String beforeQuestion = faq.getQuestion();
         String beforeAnswer = faq.getAnswer();
+        List<String> beforeKeywords = parseKeywords(faq.getKeywords());
 
-        String keywordsJson = null;
-        if (request.getKeywords() != null) {
-            try {
-                keywordsJson = objectMapper.writeValueAsString(request.getKeywords());
-            } catch (Exception e) {
-                log.warn("키워드 직렬화 실패");
-            }
-        }
-
-        faq.update(request.getQuestion(), request.getAnswer(), keywordsJson);
+        faq.update(request.getStandardQuestion(), request.getAnswer(),
+                toKeywordsJson(request.getKeywords()), request.getQType());
+        // 수정 시각이 응답에 반영되도록 즉시 반영한다
+        faqRepository.saveAndFlush(faq);
 
         // 요청값이 아닌 반영 결과를 기록해야 일부 필드만 수정한 경우에도 이력이 정확하다
+        List<String> afterKeywords = parseKeywords(faq.getKeywords());
         FaqEditHistory history = FaqEditHistory.builder()
                 .faq(faq)
                 .editedBy(user)
+                .editType(EditType.MANUAL)
                 .beforeQuestion(beforeQuestion)
                 .beforeAnswer(beforeAnswer)
+                .beforeKeywords(beforeKeywords)
                 .afterQuestion(faq.getQuestion())
                 .afterAnswer(faq.getAnswer())
-                .editReason(null)
+                .afterKeywords(afterKeywords)
+                .editReason(request.getEditReason())
                 .build();
         faqEditHistoryRepository.save(history);
 
         return FaqListUpdateResponse.builder()
                 .faqId(faq.getFaqId())
+                .qType(faq.getQType())
                 .question(faq.getQuestion())
                 .answer(faq.getAnswer())
+                .keywords(afterKeywords)
+                .historyId(history.getHistoryId())
                 .updatedAt(faq.getUpdatedAt())
                 .build();
     }
 
-    // FAQ 삭제, 실제 삭제 없이 비활성 처리
+    // FAQ 삭제, 실제 삭제 없이 비활성 처리하고 삭제 이력을 남긴다
     @Transactional
-    public void deleteFaq(Long faqId) {
+    public void deleteFaq(Long faqId, String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
         Faq faq = faqRepository.findByFaqIdAndIsActiveTrue(faqId)
                 .orElseThrow(() -> new CustomException(ErrorCode.FAQ_NOT_FOUND));
 
         faq.deactivate();
+
+        faqEditHistoryRepository.save(FaqEditHistory.builder()
+                .faq(faq)
+                .editedBy(user)
+                .editType(EditType.DELETE)
+                .beforeQuestion(faq.getQuestion())
+                .beforeAnswer(faq.getAnswer())
+                .beforeKeywords(parseKeywords(faq.getKeywords()))
+                .build());
         log.info("FAQ 삭제 완료: faqId={}", faqId);
     }
 
-    // FAQ 수정 이력 조회, 최신순
+    // FAQ 변경 이력 조회, 전체 FAQ 대상 최신순 페이징
     @Transactional(readOnly = true)
-    public FaqEditHistoryResponse getFaqHistory(Long faqId) {
-        Faq faq = faqRepository.findByFaqIdAndIsActiveTrue(faqId)
-                .orElseThrow(() -> new CustomException(ErrorCode.FAQ_NOT_FOUND));
+    public FaqEditHistoryResponse getFaqHistory(int page, int size, EditType editType) {
+        PageRequest pageRequest = PageRequest.of(page, size,
+                Sort.by("createdAt").descending().and(Sort.by("historyId").descending()));
+        Page<FaqEditHistory> historyPage = faqEditHistoryRepository.search(editType, pageRequest);
 
         List<FaqEditHistoryResponse.HistoryItem> items =
-                faqEditHistoryRepository.findByFaq_FaqIdOrderByCreatedAtDesc(faqId).stream()
+                historyPage.getContent().stream()
                         .map(h -> FaqEditHistoryResponse.HistoryItem.builder()
                                 .historyId(h.getHistoryId())
+                                .faqId(h.getFaq().getFaqId())
+                                .editType(h.getEditType())
                                 .analysisId(h.getAnalysisJob() != null
                                         ? h.getAnalysisJob().getAnalysisId() : null)
                                 .beforeQuestion(h.getBeforeQuestion())
                                 .beforeAnswer(h.getBeforeAnswer())
+                                .beforeKeywords(h.getBeforeKeywords())
                                 .afterQuestion(h.getAfterQuestion())
                                 .afterAnswer(h.getAfterAnswer())
+                                .afterKeywords(h.getAfterKeywords())
                                 .editReason(h.getEditReason())
                                 // 탈퇴한 사용자의 이력은 수정자 정보 없이 반환
                                 .editedBy(h.getEditedBy() != null
@@ -159,8 +202,11 @@ public class FaqService {
                         .collect(Collectors.toList());
 
         return FaqEditHistoryResponse.builder()
-                .faqId(faq.getFaqId())
+                .totalCount(historyPage.getTotalElements())
                 .histories(items)
+                .totalPages(historyPage.getTotalPages())
+                .currentPage(page)
+                .size(size)
                 .build();
     }
 
@@ -170,8 +216,24 @@ public class FaqService {
         List<FaqCandidate> candidates = faqCandidateRepository
                 .findByAnalysisJobAnalysisId(analysisId);
 
+        // 후보별 유사 FAQ 매칭과, 매칭된 순번에 해당하는 운영 FAQ를 한 번에 조회한다
+        Map<Long, List<FaqCandidateMatch>> matchesByCandidate = faqCandidateMatchRepository
+                .findByCandidate_AnalysisJob_AnalysisIdOrderByMatchScoreDesc(analysisId).stream()
+                .collect(Collectors.groupingBy(m -> m.getCandidate().getCandidateId()));
+
+        List<Integer> seqNums = matchesByCandidate.values().stream()
+                .flatMap(List::stream)
+                .map(FaqCandidateMatch::getMatchedFaqSeqNum)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Integer, Faq> faqBySeqNum = seqNums.isEmpty()
+                ? Map.of()
+                : faqRepository.findBySourceSeqNumIn(seqNums).stream()
+                        .collect(Collectors.toMap(Faq::getSourceSeqNum, f -> f, (a, b) -> a));
+
         List<FaqCandidateListResponse.FaqCandidateItem> items = candidates.stream()
-                .map(this::buildFaqCandidateItem)
+                .map(c -> buildFaqCandidateItem(c,
+                        matchesByCandidate.getOrDefault(c.getCandidateId(), List.of()), faqBySeqNum))
                 .collect(Collectors.toList());
 
         return FaqCandidateListResponse.builder()
@@ -203,21 +265,13 @@ public class FaqService {
         }
         candidate.apply();
 
-        String keywordsJson = null;
-        if (request.getKeywords() != null) {
-            try {
-                keywordsJson = objectMapper.writeValueAsString(request.getKeywords());
-            } catch (Exception e) {
-                log.warn("키워드 직렬화 실패");
-            }
-        }
-
         Faq newFaq = Faq.builder()
                 .candidate(candidate)
                 .question(request.getFinalQuestion())
                 .answer(request.getFinalAnswer())
-                .keywords(keywordsJson)
-                .qType(candidate.getQType())
+                .keywords(toKeywordsJson(request.getKeywords()))
+                // 운영자가 카테고리 코드를 지정하지 않으면 후보의 값을 따른다
+                .qType(request.getQType() != null ? request.getQType() : candidate.getQType())
                 .category(candidate.getCategory())
                 .createdBy(user)
                 .build();
@@ -234,16 +288,35 @@ public class FaqService {
                 .build();
         faqActionLogRepository.save(actionLog);
 
+        // 후보 유형에 따라 신규 등록(CREATE) 또는 확장(EXPAND)으로 이력을 남긴다
+        EditType editType = candidate.getCandidateType() == CandidateType.EXPAND
+                ? EditType.EXPAND : EditType.CREATE;
+        FaqEditHistory history = FaqEditHistory.builder()
+                .faq(newFaq)
+                .analysisJob(candidate.getAnalysisJob())
+                .editedBy(user)
+                .editType(editType)
+                .afterQuestion(newFaq.getQuestion())
+                .afterAnswer(newFaq.getAnswer())
+                .afterKeywords(parseKeywords(newFaq.getKeywords()))
+                .build();
+        faqEditHistoryRepository.save(history);
+
         log.info("FAQ 후보 반영 완료: candidateId={}, faqId={}",
                 candidate.getCandidateId(), newFaq.getFaqId());
 
         return FaqApplyResponse.builder()
                 .appliedFaqId(newFaq.getFaqId())
+                .candidateId(candidate.getCandidateId())
+                .editType(editType)
+                .historyId(history.getHistoryId())
+                .appliedAt(newFaq.getCreatedAt())
                 .build();
     }
 
-    // 후보 단건을 응답 DTO로 변환, 유사어 목록 포함
-    private FaqCandidateListResponse.FaqCandidateItem buildFaqCandidateItem(FaqCandidate candidate) {
+    // 후보 단건을 응답 DTO로 변환, 유사어와 유사 FAQ 목록 포함
+    private FaqCandidateListResponse.FaqCandidateItem buildFaqCandidateItem(
+            FaqCandidate candidate, List<FaqCandidateMatch> matches, Map<Integer, Faq> faqBySeqNum) {
         List<FaqCandidateListResponse.FaqCandidateItem.SynonymItem> synonyms =
                 synonymCandidateRepository
                         .findByCandidateCandidateId(candidate.getCandidateId())
@@ -253,6 +326,19 @@ public class FaqService {
                                 .type(s.getSynonymType())
                                 .build())
                         .collect(Collectors.toList());
+
+        // 매칭된 순번의 FAQ가 운영 FAQ에 없으면 ID와 질문은 비워 둔다
+        List<FaqCandidateListResponse.FaqCandidateItem.MatchedFaqItem> matchedFaqs = matches.stream()
+                .map(m -> {
+                    Faq matched = faqBySeqNum.get(m.getMatchedFaqSeqNum());
+                    return FaqCandidateListResponse.FaqCandidateItem.MatchedFaqItem.builder()
+                            .matchedFaqId(matched != null ? matched.getFaqId() : null)
+                            .matchedFaqSeqNum(m.getMatchedFaqSeqNum())
+                            .question(matched != null ? matched.getQuestion() : null)
+                            .matchScore(m.getMatchScore().doubleValue())
+                            .build();
+                })
+                .collect(Collectors.toList());
 
         return FaqCandidateListResponse.FaqCandidateItem.builder()
                 .clusterId(candidate.getCluster() != null
@@ -270,8 +356,25 @@ public class FaqService {
                 .representativeKeywords(candidate.getRepresentativeKeywords())
                 .occurrenceCount(candidate.getOccurrenceCount())
                 .synonyms(synonyms)
+                .matchedFaqs(matchedFaqs)
                 .createdAt(candidate.getCreatedAt())
                 .build();
+    }
+
+    // 키워드 리스트를 저장용 JSON 문자열로 변환, 없거나 실패하면 null
+    private String toKeywordsJson(List<String> keywords) {
+        if (keywords == null) return null;
+        try {
+            return objectMapper.writeValueAsString(keywords);
+        } catch (Exception e) {
+            log.warn("키워드 직렬화 실패");
+            return null;
+        }
+    }
+
+    // 빈 검색 조건은 미지정으로 취급
+    private String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 
     // JSON 문자열로 저장된 키워드를 리스트로 변환, 실패 시 빈 리스트 반환

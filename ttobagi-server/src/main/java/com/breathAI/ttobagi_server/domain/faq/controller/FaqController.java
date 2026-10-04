@@ -1,6 +1,7 @@
 package com.breathAI.ttobagi_server.domain.faq.controller;
 
 import com.breathAI.ttobagi_server.domain.faq.dto.*;
+import com.breathAI.ttobagi_server.domain.faq.entity.FaqEditHistory.EditType;
 import com.breathAI.ttobagi_server.domain.faq.service.FaqService;
 import com.breathAI.ttobagi_server.global.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -19,13 +20,17 @@ public class FaqController {
 
     private final FaqService faqService;
 
-    // FAQ 목록 조회
+    // FAQ 목록 조회, 카테고리와 키워드로 검색 가능
+    // versionId는 버전 기능 도입 전까지 받기만 하고 사용하지 않는다
     @GetMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<ApiResponse<FaqListResponse>> getFaqList(
+            @RequestParam(required = false) Long versionId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(ApiResponse.success(faqService.getFaqList(page, size)));
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(ApiResponse.success(faqService.getFaqList(page, size, category, keyword)));
     }
 
     // FAQ 단건 상세 조회
@@ -49,17 +54,21 @@ public class FaqController {
     // FAQ 삭제, 비활성 처리
     @DeleteMapping("/{faqId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> deleteFaq(@PathVariable Long faqId) {
-        faqService.deleteFaq(faqId);
+    public ResponseEntity<ApiResponse<Void>> deleteFaq(
+            @PathVariable Long faqId,
+            @AuthenticationPrincipal String email) {
+        faqService.deleteFaq(faqId, email);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    // FAQ 수정 이력 조회
-    @GetMapping("/history/{faqId}")
+    // FAQ 변경 이력 조회, 변경 유형으로 필터링 가능
+    @GetMapping("/history")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<ApiResponse<FaqEditHistoryResponse>> getFaqHistory(
-            @PathVariable Long faqId) {
-        return ResponseEntity.ok(ApiResponse.success(faqService.getFaqHistory(faqId), "FAQ 수정 이력을 성공적으로 조회했습니다."));
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) EditType editType) {
+        return ResponseEntity.ok(ApiResponse.success(faqService.getFaqHistory(page, size, editType), "FAQ 수정 이력을 성공적으로 조회했습니다."));
     }
 
     // 분석 결과 기반 FAQ 후보 추천 목록 조회

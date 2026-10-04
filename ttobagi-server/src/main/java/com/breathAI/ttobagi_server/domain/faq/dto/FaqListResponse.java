@@ -12,6 +12,10 @@ import java.util.List;
 // FAQ 목록 조회 응답, 페이징 정보 포함
 public class FaqListResponse {
 
+    // 버전 기능 도입 전까지 null
+    private Long versionId;
+    private String versionName;
+
     private long totalCount;
     private List<FaqItem> faqList;
     private int totalPages;
@@ -23,11 +27,11 @@ public class FaqListResponse {
     // FAQ 단건
     public static class FaqItem {
         private Long faqId;
-        private String question;
-        private String answer;
-        private List<String> keywords;
         private Integer qType;
         private String category;
+        private String standardQuestion;
+        private String answer;
+        private List<String> keywords;
 
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
         private LocalDate createdAt;

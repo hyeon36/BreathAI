@@ -106,12 +106,13 @@ public class Faq {
         this.qaCnt = 0;
     }
 
-    // 질문, 답변, 키워드 수정
+    // 질문, 답변, 키워드, 카테고리 코드 수정
     // PATCH 요청 특성상 전달되지 않은 필드는 기존 값을 유지한다
-    public void update(String question, String answer, String keywords) {
+    public void update(String question, String answer, String keywords, Integer qType) {
         if (question != null) this.question = question;
         if (answer != null) this.answer = answer;
         if (keywords != null) this.keywords = keywords;
+        if (qType != null) this.qType = qType;
     }
 
     // 비활성 처리 (soft delete)
