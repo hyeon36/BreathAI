@@ -3,6 +3,7 @@ package com.breathAI.ttobagi_server.domain.faq.controller;
 import com.breathAI.ttobagi_server.domain.faq.dto.*;
 import com.breathAI.ttobagi_server.domain.faq.entity.FaqEditHistory.EditType;
 import com.breathAI.ttobagi_server.domain.faq.service.FaqService;
+import com.breathAI.ttobagi_server.domain.faq.service.FaqVersionService;
 import com.breathAI.ttobagi_server.global.dto.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +20,10 @@ import org.springframework.web.bind.annotation.*;
 public class FaqController {
 
     private final FaqService faqService;
+    private final FaqVersionService faqVersionService;
 
     // FAQ 목록 조회, 카테고리와 키워드로 검색 가능
-    // versionId는 버전 기능 도입 전까지 받기만 하고 사용하지 않는다
+    // versionId를 주면 그 버전 시점의 FAQ를, 생략하면 현재 운영 FAQ를 조회한다
     @GetMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<ApiResponse<FaqListResponse>> getFaqList(
@@ -30,7 +32,7 @@ public class FaqController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String keyword) {
-        return ResponseEntity.ok(ApiResponse.success(faqService.getFaqList(page, size, category, keyword)));
+        return ResponseEntity.ok(ApiResponse.success(faqService.getFaqList(versionId, page, size, category, keyword)));
     }
 
     // FAQ 단건 상세 조회
@@ -59,6 +61,23 @@ public class FaqController {
             @AuthenticationPrincipal String email) {
         faqService.deleteFaq(faqId, email);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    // FAQ 버전 목록 조회
+    @GetMapping("/versions")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<FaqVersionListResponse>> getFaqVersions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.success(faqVersionService.getVersions(page, size)));
+    }
+
+    // FAQ 버전 상세 조회, 버전에 묶인 변경 목록 포함
+    @GetMapping("/versions/{versionId}")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<FaqVersionDetailResponse>> getFaqVersionDetail(
+            @PathVariable Long versionId) {
+        return ResponseEntity.ok(ApiResponse.success(faqVersionService.getVersionDetail(versionId)));
     }
 
     // FAQ 변경 이력 조회, 변경 유형으로 필터링 가능

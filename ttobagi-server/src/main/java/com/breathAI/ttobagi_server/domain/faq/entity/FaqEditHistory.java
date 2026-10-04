@@ -41,6 +41,12 @@ public class FaqEditHistory {
                 columnDefinition = "BIGINT COMMENT '수정한 관리자 ID (탈퇴 시 NULL)'")
     private User editedBy;
 
+    // 이 변경이 묶인 버전, 아직 버전으로 확정되지 않았으면 null
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "version_id", foreignKey = @ForeignKey(name = "fk_edit_history_version_id"),
+                columnDefinition = "BIGINT COMMENT '이 변경이 포함된 버전 ID (미확정 시 NULL)'")
+    private FaqVersion version;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "edit_type", nullable = false, length = 20,
             columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'MANUAL' COMMENT 'CREATE, EXPAND, MANUAL, DELETE'")

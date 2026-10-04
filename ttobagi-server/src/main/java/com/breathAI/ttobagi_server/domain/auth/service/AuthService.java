@@ -13,6 +13,7 @@ import com.breathAI.ttobagi_server.domain.faq.repository.FaqActionLogRepository;
 import com.breathAI.ttobagi_server.domain.faq.repository.FaqCandidateRepository;
 import com.breathAI.ttobagi_server.domain.faq.repository.FaqEditHistoryRepository;
 import com.breathAI.ttobagi_server.domain.faq.repository.FaqRepository;
+import com.breathAI.ttobagi_server.domain.faq.repository.FaqVersionRepository;
 import com.breathAI.ttobagi_server.domain.faq.repository.RetrieveLogRepository;
 import com.breathAI.ttobagi_server.global.exception.CustomException;
 import com.breathAI.ttobagi_server.global.exception.ErrorCode;
@@ -47,6 +48,7 @@ public class AuthService {
     private final FaqCandidateRepository faqCandidateRepository;
     private final FaqEditHistoryRepository faqEditHistoryRepository;
     private final FaqRepository faqRepository;
+    private final FaqVersionRepository faqVersionRepository;
     private final RetrieveLogRepository retrieveLogRepository;
 
     // 관리자 승격용 인증 코드 (환경변수 SYSTEM_ADMIN_CODE)
@@ -207,6 +209,7 @@ public class AuthService {
         faqCandidateRepository.clearReviewedBy(user);
         faqEditHistoryRepository.clearEditedBy(user);
         faqRepository.clearCreatedBy(user);
+        faqVersionRepository.clearCreatedBy(user);
         retrieveLogRepository.clearUser(user);
         userRepository.delete(user);
     }

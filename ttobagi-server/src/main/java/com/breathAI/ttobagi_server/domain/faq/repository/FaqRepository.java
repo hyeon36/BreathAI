@@ -20,6 +20,9 @@ public interface FaqRepository extends JpaRepository<Faq, Long> {
     // 활성 FAQ 목록 페이징
     Page<Faq> findByIsActiveTrueOrderByCreatedAtDesc(Pageable pageable);
 
+    // 활성 FAQ 수
+    long countByIsActiveTrue();
+
     // 단건 조회 (활성만)
     Optional<Faq> findByFaqIdAndIsActiveTrue(Long faqId);
 
