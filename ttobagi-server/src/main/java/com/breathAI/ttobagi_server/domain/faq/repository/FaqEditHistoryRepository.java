@@ -37,6 +37,9 @@ public interface FaqEditHistoryRepository extends JpaRepository<FaqEditHistory, 
     @Query("SELECT h.editType, COUNT(h) FROM FaqEditHistory h WHERE h.version IS NULL GROUP BY h.editType")
     List<Object[]> countPendingByEditType();
 
+    // 아직 버전으로 묶이지 않은 변경이 있는지 확인
+    boolean existsByVersionIsNull();
+
     // 아직 버전으로 묶이지 않은 변경을 새 버전에 묶는다
     @Modifying
     @Query("UPDATE FaqEditHistory h SET h.version = :version WHERE h.version IS NULL")
