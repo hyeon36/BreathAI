@@ -15,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
@@ -63,6 +64,8 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(authz -> authz
+                // SSE 응답을 마무리하는 내부 재요청은 최초 요청에서 이미 인증을 거쳤으므로 다시 검사하지 않는다
+                .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/api/v1/dashboard/analyze/callback/**").permitAll()
