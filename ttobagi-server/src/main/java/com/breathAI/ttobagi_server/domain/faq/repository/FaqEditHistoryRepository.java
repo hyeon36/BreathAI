@@ -2,6 +2,9 @@ package com.breathAI.ttobagi_server.domain.faq.repository;
 
 import com.breathAI.ttobagi_server.domain.faq.entity.FaqEditHistory;
 import com.breathAI.ttobagi_server.domain.auth.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query; 
@@ -23,6 +26,11 @@ public interface FaqEditHistoryRepository extends JpaRepository<FaqEditHistory, 
     List<FaqEditHistory> findByEditedBy_UserId(Long userId);
     // 분석 및 수정자 복합 조회
     List<FaqEditHistory> findByAnalysisJob_AnalysisIdAndEditedBy_UserId(Long analysisId, Long userId);
+
+    // 전체 변경 이력 페이징 조회, editType이 null이면 전체
+    @EntityGraph(attributePaths = {"faq", "analysisJob", "editedBy"})
+    @Query("SELECT h FROM FaqEditHistory h WHERE (:editType IS NULL OR h.editType = :editType)")
+    Page<FaqEditHistory> search(@Param("editType") FaqEditHistory.EditType editType, Pageable pageable);
 
     // 회원 탈퇴 시 사용자 참조 해제
     @Modifying
