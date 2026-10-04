@@ -30,7 +30,7 @@ public class FaqEditHistoryResponse {
         private Long faqId;
         private EditType editType;
         private Long analysisId;
-        // 버전 기능 도입 전까지 null
+        // 아직 버전으로 묶이지 않은 변경이면 null
         private Long versionId;
         private String beforeQuestion;
         private String beforeAnswer;

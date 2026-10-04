@@ -12,7 +12,7 @@ import java.util.List;
 // FAQ 목록 조회 응답, 페이징 정보 포함
 public class FaqListResponse {
 
-    // 버전 기능 도입 전까지 null
+    // 특정 버전을 조회한 경우에만 채워진다. 현재 운영 FAQ를 조회하면 null
     private Long versionId;
     private String versionName;
 

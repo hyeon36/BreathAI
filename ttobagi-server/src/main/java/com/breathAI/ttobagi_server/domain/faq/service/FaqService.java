@@ -38,13 +38,24 @@ public class FaqService {
     private final SynonymCandidateRepository synonymCandidateRepository;
     private final FaqActionLogRepository faqActionLogRepository;
     private final FaqEditHistoryRepository faqEditHistoryRepository;
+    private final FaqVersionRepository faqVersionRepository;
+    private final FaqVersionItemRepository faqVersionItemRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
     // FAQ 목록 조회, 활성 항목만 최신순 페이징
+    // versionId가 있으면 그 버전 시점의 FAQ를, 없으면 현재 운영 FAQ를 조회한다
     // 카테고리는 마스터의 표시명과 일치하는 코드로, 키워드는 질문·답변·키워드 목록에서 검색
     @Transactional(readOnly = true)
-    public FaqListResponse getFaqList(int page, int size, String category, String keyword) {
+    public FaqListResponse getFaqList(Long versionId, int page, int size, String category, String keyword) {
+        FaqVersion version = null;
+        if (versionId != null) {
+            version = faqVersionRepository.findById(versionId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.FAQ_VERSION_NOT_FOUND));
+        }
+        Long responseVersionId = version != null ? version.getVersionId() : null;
+        String responseVersionName = version != null ? version.getVersionName() : null;
+
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("createdAt").descending());
 
         // 카테고리 조건이 있을 때만 마스터를 조회한다
@@ -55,6 +66,8 @@ public class FaqService {
             // 마스터에 없는 카테고리명이면 결과 없음
             if (qTypes.isEmpty()) {
                 return FaqListResponse.builder()
+                        .versionId(responseVersionId)
+                        .versionName(responseVersionName)
                         .faqList(List.of())
                         .totalCount(0)
                         .totalPages(0)
@@ -62,6 +75,32 @@ public class FaqService {
                         .size(size)
                         .build();
             }
+        }
+
+        if (version != null) {
+            Page<FaqVersionItem> itemPage = faqVersionItemRepository.search(
+                    version.getVersionId(), categoryName != null, qTypes, blankToNull(keyword),
+                    PageRequest.of(page, size, Sort.by("faqCreatedAt").descending()));
+
+            return FaqListResponse.builder()
+                    .versionId(responseVersionId)
+                    .versionName(responseVersionName)
+                    .faqList(itemPage.getContent().stream()
+                            .map(i -> FaqListResponse.FaqItem.builder()
+                                    .faqId(i.getFaqId())
+                                    .standardQuestion(i.getQuestion())
+                                    .answer(i.getAnswer())
+                                    .keywords(parseKeywords(i.getKeywords()))
+                                    .qType(i.getQType())
+                                    .category(i.getCategory())
+                                    .createdAt(i.getFaqCreatedAt().toLocalDate())
+                                    .build())
+                            .collect(Collectors.toList()))
+                    .totalCount(itemPage.getTotalElements())
+                    .totalPages(itemPage.getTotalPages())
+                    .currentPage(page)
+                    .size(size)
+                    .build();
         }
 
         Page<Faq> faqPage = faqRepository.search(
@@ -189,6 +228,8 @@ public class FaqService {
                                 .editType(h.getEditType())
                                 .analysisId(h.getAnalysisJob() != null
                                         ? h.getAnalysisJob().getAnalysisId() : null)
+                                .versionId(h.getVersion() != null
+                                        ? h.getVersion().getVersionId() : null)
                                 .beforeQuestion(h.getBeforeQuestion())
                                 .beforeAnswer(h.getBeforeAnswer())
                                 .beforeKeywords(h.getBeforeKeywords())
