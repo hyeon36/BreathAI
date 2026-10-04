@@ -1,5 +1,6 @@
 package com.breathAI.ttobagi_server.domain.dashboard.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -152,7 +153,9 @@ public class AnalyzeResultResponse {
     @Builder
     public static class SurgeDetection {
         private String keyword;
-        private boolean isNew;
+        // boolean이면 응답에 new로 나가므로 Boolean으로 둔다
+        @JsonProperty("isNew")
+        private Boolean isNew;
         private int relatedClusterLabel;
         private List<PeriodStat> periodStats;
 
