@@ -20,6 +20,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -243,6 +245,7 @@ public class FaqService {
     }
 
     // FAQ 후보를 운영 FAQ로 반영
+    // NEW 후보는 FAQ를 새로 등록하고, EXPAND 후보는 가장 유사한 기존 FAQ를 확장한다
     // 상태 전이는 PENDING -> ACCEPTED -> APPLIED 순이며, 그 외 상태는 반영 대상이 아니다
     @Transactional
     public FaqApplyResponse applyFaqCandidate(FaqApplyRequest request, String email) {
@@ -259,23 +262,48 @@ public class FaqService {
             throw new CustomException(ErrorCode.FAQ_CANDIDATE_NOT_APPLICABLE);
         }
 
+        boolean isExpand = candidate.getCandidateType() == CandidateType.EXPAND;
+
+        // 확장 대상이 없으면 후보 상태를 바꾸기 전에 거부한다
+        Faq targetFaq = isExpand ? findExpandTarget(candidate) : null;
+
         // 승인 절차를 거치지 않은 후보는 반영과 동시에 승인 처리한다
         if (beforeStatus == ReviewStatus.PENDING) {
             candidate.accept(user);
         }
         candidate.apply();
 
-        Faq newFaq = Faq.builder()
-                .candidate(candidate)
-                .question(request.getFinalQuestion())
-                .answer(request.getFinalAnswer())
-                .keywords(toKeywordsJson(request.getKeywords()))
-                // 운영자가 카테고리 코드를 지정하지 않으면 후보의 값을 따른다
-                .qType(request.getQType() != null ? request.getQType() : candidate.getQType())
-                .category(candidate.getCategory())
-                .createdBy(user)
-                .build();
-        faqRepository.save(newFaq);
+        Faq appliedFaq;
+        String beforeQuestion = null;
+        String beforeAnswer = null;
+        List<String> beforeKeywords = null;
+
+        if (isExpand) {
+            beforeQuestion = targetFaq.getQuestion();
+            beforeAnswer = targetFaq.getAnswer();
+            beforeKeywords = parseKeywords(targetFaq.getKeywords());
+
+            // 키워드는 기존 것에 합치고, 질문과 답변은 운영자가 확정한 값으로 바꾼다
+            LinkedHashSet<String> mergedKeywords = new LinkedHashSet<>(beforeKeywords);
+            if (request.getKeywords() != null) {
+                mergedKeywords.addAll(request.getKeywords());
+            }
+            targetFaq.update(request.getFinalQuestion(), request.getFinalAnswer(),
+                    toKeywordsJson(new ArrayList<>(mergedKeywords)), request.getQType());
+            // 수정 시각이 응답에 반영되도록 즉시 반영한다
+            appliedFaq = faqRepository.saveAndFlush(targetFaq);
+        } else {
+            appliedFaq = faqRepository.save(Faq.builder()
+                    .candidate(candidate)
+                    .question(request.getFinalQuestion())
+                    .answer(request.getFinalAnswer())
+                    .keywords(toKeywordsJson(request.getKeywords()))
+                    // 운영자가 카테고리 코드를 지정하지 않으면 후보의 값을 따른다
+                    .qType(request.getQType() != null ? request.getQType() : candidate.getQType())
+                    .category(candidate.getCategory())
+                    .createdBy(user)
+                    .build());
+        }
 
         FaqActionLog actionLog = FaqActionLog.builder()
                 .candidate(candidate)
@@ -288,30 +316,43 @@ public class FaqService {
                 .build();
         faqActionLogRepository.save(actionLog);
 
-        // 후보 유형에 따라 신규 등록(CREATE) 또는 확장(EXPAND)으로 이력을 남긴다
-        EditType editType = candidate.getCandidateType() == CandidateType.EXPAND
-                ? EditType.EXPAND : EditType.CREATE;
+        // 신규 등록은 CREATE, 기존 FAQ 확장은 EXPAND로 이력을 남긴다
+        EditType editType = isExpand ? EditType.EXPAND : EditType.CREATE;
         FaqEditHistory history = FaqEditHistory.builder()
-                .faq(newFaq)
+                .faq(appliedFaq)
                 .analysisJob(candidate.getAnalysisJob())
                 .editedBy(user)
                 .editType(editType)
-                .afterQuestion(newFaq.getQuestion())
-                .afterAnswer(newFaq.getAnswer())
-                .afterKeywords(parseKeywords(newFaq.getKeywords()))
+                .beforeQuestion(beforeQuestion)
+                .beforeAnswer(beforeAnswer)
+                .beforeKeywords(beforeKeywords)
+                .afterQuestion(appliedFaq.getQuestion())
+                .afterAnswer(appliedFaq.getAnswer())
+                .afterKeywords(parseKeywords(appliedFaq.getKeywords()))
                 .build();
         faqEditHistoryRepository.save(history);
 
-        log.info("FAQ 후보 반영 완료: candidateId={}, faqId={}",
-                candidate.getCandidateId(), newFaq.getFaqId());
+        log.info("FAQ 후보 반영 완료: candidateId={}, faqId={}, editType={}",
+                candidate.getCandidateId(), appliedFaq.getFaqId(), editType);
 
         return FaqApplyResponse.builder()
-                .appliedFaqId(newFaq.getFaqId())
+                .appliedFaqId(appliedFaq.getFaqId())
                 .candidateId(candidate.getCandidateId())
                 .editType(editType)
                 .historyId(history.getHistoryId())
-                .appliedAt(newFaq.getCreatedAt())
+                .appliedAt(isExpand ? appliedFaq.getUpdatedAt() : appliedFaq.getCreatedAt())
                 .build();
+    }
+
+    // EXPAND 후보의 확장 대상 조회
+    // 후보의 유사 FAQ 중 점수가 가장 높은 것을 원본 순번으로 운영 FAQ에서 찾는다
+    private Faq findExpandTarget(FaqCandidate candidate) {
+        return faqCandidateMatchRepository
+                .findByCandidateCandidateIdOrderByMatchScoreDesc(candidate.getCandidateId()).stream()
+                .findFirst()
+                .flatMap(m -> faqRepository
+                        .findFirstBySourceSeqNumAndIsActiveTrueOrderByFaqIdAsc(m.getMatchedFaqSeqNum()))
+                .orElseThrow(() -> new CustomException(ErrorCode.FAQ_EXPAND_TARGET_NOT_FOUND));
     }
 
     // 후보 단건을 응답 DTO로 변환, 유사어와 유사 FAQ 목록 포함

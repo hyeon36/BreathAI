@@ -49,6 +49,9 @@ public interface FaqRepository extends JpaRepository<Faq, Long> {
             nativeQuery = true)
     List<Integer> findQTypesByCategoryName(@Param("name") String name);
 
+    // 원본 FAQ 순번으로 활성 FAQ 단건 조회 (EXPAND 후보의 확장 대상)
+    Optional<Faq> findFirstBySourceSeqNumAndIsActiveTrueOrderByFaqIdAsc(Integer sourceSeqNum);
+
     // 원본 FAQ 순번으로 조회 (후보의 유사 FAQ 연결용)
     List<Faq> findBySourceSeqNumIn(Collection<Integer> sourceSeqNums);
 
