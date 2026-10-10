@@ -2,7 +2,7 @@
 
 이 프로젝트에서 "기존 FAQ"는 다음 두 서울교통공사 수제작 자료를 모두 뜻한다.
 
-1. 일반상담 Excel: 카테고리, 질문, 답변, 검색 키워드 제공
+1. 일반상담 Excel: 카테고리, 질문, 답변, 유사질문 제공
 2. counselling_info CSV: 기존 FAQ 식별자(seq_num), q_type, 질문, 답변 제공
 
 두 자료에서 동일한 질문 또는 답변은 하나의 레코드로 연결해 양쪽 메타데이터를
@@ -33,6 +33,10 @@ def _default_connection_factory():
     입력 환경변수: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
     출력: DictCursor를 사용하는 PyMySQL connection
     """
+    if os.getenv("TTOBAGI_DB_ENV_FILE") or os.getenv("TTOBAGI_DB_URL"):
+        from services.bronze_faq_ingest import connect_db
+        return connect_db(os.getenv("TTOBAGI_DB_ENV_FILE"))
+
     import pymysql
     from pymysql.cursors import DictCursor
 
@@ -128,6 +132,8 @@ def load_approved_faqs(
 
     읽는 데이터: faq_id, source_seq_num, q_type, category, question, answer,
     keywords. 비활성 FAQ와 질문/답변이 비어 있는 행은 검색에서 제외한다.
+    기존 FAQ를 복사한 행은 수정 이력이 있을 때만 읽는다. 수정하지 않은
+    복사본은 원천 파일에서 이미 읽으므로 중복으로 추가하지 않는다.
     """
     factory = connection_factory or _default_connection_factory
     conn = factory()
@@ -135,10 +141,16 @@ def load_approved_faqs(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT faq_id, source_seq_num, q_type, category, question, answer, keywords
-                FROM gold_faq
-                WHERE is_active = 1
-                ORDER BY faq_id
+                SELECT f.faq_id, f.source_seq_num, f.q_type, f.category,
+                       f.question, f.answer, f.keywords
+                FROM gold_faq f
+                WHERE f.is_active = 1
+                  AND (f.source_seq_num IS NULL
+                       OR EXISTS (
+                           SELECT 1 FROM gold_faq_edit_history h
+                           WHERE h.faq_id = f.faq_id
+                       ))
+                ORDER BY f.faq_id
                 """
             )
             rows = cursor.fetchall()
@@ -234,10 +246,10 @@ def _read_general(path: Path, counselling: list[dict]) -> tuple[list[dict], set[
 
     일반상담과 counselling_info는 모두 기존 FAQ이다. 질문 또는 답변이 같은
     항목에는 counselling의 seq_num/q_type을 결합하고, 매칭되지 않은 일반상담
-    항목도 category와 키워드를 가진 독립 FAQ로 유지한다.
+    항목도 category와 유사질문을 가진 독립 FAQ로 유지한다.
 
     전달 파일의 한글 헤더 인코딩이 일정하지 않아 고정 열 순서를 사용한다:
-    0 번호, 2 카테고리, 3 질문제목, 4 의문문, 5 답변, 6~15 검색키워드.
+    0 번호, 2 카테고리, 3 상담제목, 4 되묻기, 5 답변, 6~15 유사질문1~10.
     """
     import pandas as pd
 
@@ -257,7 +269,7 @@ def _read_general(path: Path, counselling: list[dict]) -> tuple[list[dict], set[
         matched = by_question.get(_match_key(question)) or by_answer.get(_match_key(answer))
         if matched:
             matched_seq_nums.add(matched["source_seq_num"])
-        keywords = list(dict.fromkeys(
+        similar_questions = list(dict.fromkeys(
             text for text in (_clean_text(row.iloc[i]) for i in range(6, 16)) if text
         ))
         number = int(row.iloc[0])
@@ -265,8 +277,8 @@ def _read_general(path: Path, counselling: list[dict]) -> tuple[list[dict], set[
         q_type = matched.get("q_type") if matched else None
         source_seq_num = matched.get("source_seq_num") if matched else None
         parts = [f"질문: {question}", f"답변: {answer}"]
-        if keywords:
-            parts.append(f"키워드: {', '.join(keywords)}")
+        if similar_questions:
+            parts.append(f"유사질문: {', '.join(similar_questions)}")
         records.append({
             "source_type": "general_consultation",
             "source_seq_num": source_seq_num,
@@ -274,7 +286,8 @@ def _read_general(path: Path, counselling: list[dict]) -> tuple[list[dict], set[
             "category": category,
             "question": question,
             "answer": answer,
-            "keywords": keywords,
+            "keywords": [],
+            "similar_questions": similar_questions,
             "page_label": _clean_text(row.iloc[3]) or question,
             "chunk_id": f"general_consultation:{number}",
             "source_url": None,
@@ -326,16 +339,22 @@ def _question_key(record: dict) -> str | None:
 def merge_kb(base_records: list[dict], approved_faqs: list[dict]) -> list[dict]:
     """기존 FAQ/문서 KB에 gold_faq를 추가한다.
 
-    질문이 정확히 같은 경우에는 운영자가 검수한 gold_faq를 우선하고,
+    원천 seq_num 또는 질문이 같은 경우에는 운영자가 검수한 gold_faq를 우선하고,
     나머지 일반상담·counselling FAQ는 모두 유지한다.
     """
     approved_keys = {
         key for record in approved_faqs
         if (key := _question_key(record)) is not None
     }
+    approved_sources = {
+        record["source_seq_num"] for record in approved_faqs
+        if record.get("source_seq_num") is not None
+    }
     retained_base = [
         record for record in base_records
         if _question_key(record) not in approved_keys
+        and (record.get("source_seq_num") is None
+             or record["source_seq_num"] not in approved_sources)
     ]
     return retained_base + approved_faqs
 
